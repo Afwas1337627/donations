@@ -9,6 +9,8 @@ from pprint import pprint
 def store_donation(this_key, this_donation):
     member = 'Unknown'
     donation = '0'
+    conn = sqlite3.connect('donations.sqlite')
+    c = conn.cursor()
     if 'deposited' in this_donation['news']:
         # Player deposited money
         regex = r'XID=(\d+).*?>(\w+)<\/a> deposited \$([\d,]+)$'
@@ -20,15 +22,15 @@ def store_donation(this_key, this_donation):
         print(this_donation['news'])
         print(member)
         print(donation)
-        conn = sqlite3.connect('donations.sqlite')
-        c = conn.cursor()
         query = """INSERT INTO donations(
-                donator, donation_id, donation_timestamp, donation_text, donation) 
-                VALUES(?, ?, ?, ?)
+                donator, donation_id, donation_timestamp, donation_text, donation_amount) 
+                VALUES(?, ?, ?, ?, ?)
                 ON CONFLICT(donator, donation_timestamp) DO NOTHING;"""
         c.execute(query, (member, this_key, this_donation['timestamp'], this_donation['news'],
                           donation))
-        c.close()
+    conn.commit()
+    c.close()
+    conn.close()
 
 
 if __name__ == '__main__':
