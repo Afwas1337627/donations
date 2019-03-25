@@ -11,6 +11,8 @@ if __name__ == '__main__':
     c.execute(query)
     query = """DROP TABLE IF EXISTS donations;"""
     c.execute(query)
+    query = """DROP TABLE IF EXISTS bank;"""
+    c.execute(query)
     conn.commit()
 
     query = """CREATE TABLE factions(
@@ -26,21 +28,15 @@ if __name__ == '__main__':
         member INTEGER UNIQUE,
         member_name TEXT,
         faction INTEGER,
-        money_donated INTEGER DEFAULT 0,
-        points_donated INTEGER DEFAULT 0,
         FOREIGN KEY(faction) REFERENCES factions(faction));"""
     c.execute(query)
     conn.commit()
 
-    query = """CREATE TABLE donations(
+    query = """CREATE TABLE bank(
         id INTEGER PRIMARY KEY,
-        donation_amount INTEGER,
-        donation_timestamp INTEGER,
-        donation_id INTEGER,
-        donation_text INTEGER,
-        banker INTEGER DEFAULT 0,
-        donator INTEGER,
-        UNIQUE(donator, donation_timestamp),
-        FOREIGN KEY(donator) REFERENCES members(member));"""
+        member INTEGER,
+        money_balance INTEGER,
+        point_balance INTEGER,
+        FOREIGN KEY (member) REFERENCES members(member));"""
     c.execute(query)
     conn.commit()
