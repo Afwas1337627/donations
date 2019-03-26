@@ -9,8 +9,6 @@ if __name__ == '__main__':
     c.execute(query)
     query = """DROP TABLE IF EXISTS members;"""
     c.execute(query)
-    query = """DROP TABLE IF EXISTS donations;"""
-    c.execute(query)
     query = """DROP TABLE IF EXISTS bank;"""
     c.execute(query)
     conn.commit()
@@ -34,7 +32,8 @@ if __name__ == '__main__':
 
     query = """CREATE TABLE bank(
         id INTEGER PRIMARY KEY,
-        member INTEGER,
+        stored_timestamp TEXT DEFAULT CURRENT_TIMESTAMP,
+        member INTEGER UNIQUE,
         money_balance INTEGER,
         point_balance INTEGER,
         FOREIGN KEY (member) REFERENCES members(member));"""
