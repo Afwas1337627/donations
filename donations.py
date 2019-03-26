@@ -8,6 +8,12 @@ import urllib.request
 
 
 def store_faction_data(this_id, this_name):
+    """
+    Store data for a single faction in table factions
+    :param this_id:
+    :param this_name:
+    :return:
+    """
     conn = sqlite3.connect('donations.sqlite')
     c = conn.cursor()
     query = """INSERT INTO factions(faction, faction_name)
@@ -21,6 +27,11 @@ def store_faction_data(this_id, this_name):
 
 
 def store_all_members_data(all_members):
+    """
+    Store data for all members in the table members
+    :param all_members:
+    :return:
+    """
     conn = sqlite3.connect('donations.sqlite')
     c = conn.cursor()
     query = """INSERT INTO members(member, member_name, faction)
@@ -36,6 +47,11 @@ def store_all_members_data(all_members):
 
 
 def get_members(faction_id):
+    """
+    Return a set with ids for all members in the members table
+    :param faction_id:
+    :return all_members:
+    """
     query = """SELECT member FROM members
         WHERE faction = ?;"""
     conn = sqlite3.connect('donations.sqlite')
@@ -44,10 +60,17 @@ def get_members(faction_id):
     all_members = set()
     for member in r.fetchall():
         all_members.add(member)
+    c.close()
+    conn.close()
     return all_members
 
 
 def store_bank_data(storing_donations):
+    """
+    Store data for all bank accounts in the table bank
+    :param storing_donations:
+    :return:
+    """
     conn = sqlite3.connect('donations.sqlite')
     c = conn.cursor()
     query = """INSERT INTO bank(stored_timestamp, member, money_balance, point_balance)
@@ -66,6 +89,13 @@ def store_bank_data(storing_donations):
 
 
 def analyze_donations(raw_donations):
+    """
+    Analyze the raw donation data and filter out member ID,
+    the amount that was deposited or taken and the operation
+    (withdrawal or deposited)
+    :param raw_donations:
+    :return this_donations:
+    """
     this_donations = []
     for this_donation in raw_donations:
         pattern = r'XID=(\d+).*?>|$'
@@ -97,17 +127,31 @@ def analyze_donations(raw_donations):
 
 
 def get_timestamp(this_member):
+    """
+    Retrieve the latest bank account balance for given member
+    :param this_member:
+    :return res:
+    """
     query = """SELECT money_balance, stored_timestamp FROM bank
         WHERE member = ?;"""
     conn = sqlite3.connect('donations.sqlite')
     c = conn.cursor()
     r = c.execute(query, (this_member,))
     res = r.fetchone()
-
+    c.close()
+    conn.close()
     return res
 
 
 def store_final_donation(this_timestamp, this_member, this_amount):
+    """
+    For a member that has left the faction store the updated bank
+    account balance
+    :param this_timestamp:
+    :param this_member:
+    :param this_amount:
+    :return:
+    """
     conn = sqlite3.connect('donations.sqlite')
     c = conn.cursor()
     query = """INSERT INTO bank(stored_timestamp, member, money_balance)
@@ -116,14 +160,15 @@ def store_final_donation(this_timestamp, this_member, this_amount):
             money_balance = excluded.money_balance,
             point_balance = excluded.point_balance,
             stored_timestamp = excluded.stored_timestamp;"""
-    for this_key, this_donation in all_donations.items():
-        c.execute(query, (this_timestamp, this_member, this_amount))
+    c.execute(query, (this_timestamp, this_member, this_amount))
+    conn.commit()
+    c.close()
+    conn.close()
 
 
 if __name__ == '__main__':
     url = "https://api.torn.com/faction/?selections={},{},{}&key={}".format("fundsnews", "basic", "donations",
                                                                             random.choice(api_keys))
-    print(url)
     user_agent = 'Relentlessbot/0.1 (+https://lt.relentless.pw/bot.html)'
     headers = {'User-Agent': user_agent, }
     req = urllib.request.Request(url, None, headers)
@@ -133,14 +178,18 @@ if __name__ == '__main__':
         store_faction_data(data["ID"], data["name"])
         # Member data
         store_all_members_data(data['members'])
+        # Compare database with list from API
         members = set()
         for key in data['members']:
             members.add(key)
         database_members = get_members(8336)
         new_members = members - database_members
         old_members = database_members - members
-
+        # Bank
         store_bank_data(data["donations"])
+        # This section handles members that have left the
+        # faction. Final details on their bank account only live
+        # in the donationnews from API
         donations = []
         all_donations = analyze_donations(data["donationnews"])
         for donation in all_donations:
@@ -153,6 +202,9 @@ if __name__ == '__main__':
                 posthumously_withdrawals = []
                 this_withdrawal = {}
                 if last_available_timestamp < donations["timestamp"]:
+                    # It is very possible that there are more than one
+                    # withdrawals in the time between the latest API
+                    # poll and the time the member left the faction
                     this_withdrawal["timestamp"] = donation["timestamp"]
                     this_withdrawal["final_deposit"] = last_available_timestamp
                     this_withdrawal["member"] = donation["member"]
