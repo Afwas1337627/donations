@@ -6,6 +6,8 @@ import time
 import urllib.request
 # from pprint import pprint
 
+import passwords
+
 
 def store_faction_data(this_id, this_name):
     """
@@ -59,7 +61,7 @@ def get_members(faction_id):
     r = c.execute(query, (faction_id,))
     all_members = set()
     for member in r.fetchall():
-        all_members.add(member)
+        all_members.add(str(member[0]))
     c.close()
     conn.close()
     return all_members
@@ -166,7 +168,60 @@ def store_final_donation(this_timestamp, this_member, this_amount):
     conn.close()
 
 
+def get_new_faction_for_old_member(this_member):
+    this_url = "https://api.torn.com/user/{}?selections=&key={}".format(this_member, random.choice(api_keys))
+    # this_user_agent = 'Relentlessbot/0.1 (+https://lt.relentless.pw/bot.html)'
+    # this_headers = {'User-Agent': this_user_agent, }
+    this_req = urllib.request.Request(this_url, None, headers)
+    with urllib.request.urlopen(this_req) as this_val:
+        this_data = json.loads(this_val.read().decode())
+        faction_id = this_data["faction"]["faction_id"]
+        faction_name = this_data["faction"]["faction_name"]
+        print("{} [{}] is member of {} [{}]".format(
+            this_data["name"],
+            this_data["player_id"],
+            faction_id,
+            faction_name
+        ))
+        conn = sqlite3.connect('donations.sqlite')
+        c = conn.cursor()
+
+        query = """INSERT INTO factions(faction, faction_name)
+            VALUES(?, ?)
+            ON CONFLICT(faction) DO UPDATE SET 
+            faction_name = excluded.faction_name;"""
+        c.execute(query, (faction_id, faction_name))
+        conn.commit()
+
+        query = """UPDATE members 
+            SET faction = ?,
+                member_name = ?
+            WHERE member = ?;"""
+        c.execute(query, (faction_id, this_data["name"], this_data["player_id"]))
+        conn.commit()
+
+        c.close()
+        conn.close()
+
+
+def prune_database():
+    conn = sqlite3.connect('donations.sqlite')
+    c = conn.cursor()
+    query = """DELETE FROM bank
+        WHERE money_balance = 0
+        AND point_balance = 0
+        AND member IN (
+            SELECT member FROM members WHERE faction != ?);"""
+    c.execute(query, (my_faction,))
+    conn.commit()
+    c.close()
+    conn.close()
+
+
 if __name__ == '__main__':
+    my_faction = 8336
+    # File passwords.py not in git
+    api_keys = passwords.api_keys
     url = "https://api.torn.com/faction/?selections={},{},{}&key={}".format("fundsnews", "basic", "donations",
                                                                             random.choice(api_keys))
     user_agent = 'Relentlessbot/0.1 (+https://lt.relentless.pw/bot.html)'
@@ -182,7 +237,7 @@ if __name__ == '__main__':
         members = set()
         for key in data['members']:
             members.add(key)
-        database_members = get_members(8336)
+        database_members = get_members(my_faction)
         new_members = members - database_members
         old_members = database_members - members
         # Bank
@@ -201,7 +256,7 @@ if __name__ == '__main__':
                 last_available_timestamp = last_available_data[1]
                 posthumously_withdrawals = []
                 this_withdrawal = {}
-                if last_available_timestamp < donations["timestamp"]:
+                if last_available_timestamp < donation["timestamp"]:
                     # It is very possible that there are more than one
                     # withdrawals in the time between the latest API
                     # poll and the time the member left the faction
@@ -216,4 +271,7 @@ if __name__ == '__main__':
                     if this_withdrawal["direction"] == "withdrawn":
                         this_withdrawal["donation"] = 0 - this_withdrawal["donation"]
                     last_available_money += this_withdrawal["donation"]
-                    store_final_donation(this_withdrawal["member"], last_available_money)
+                    store_final_donation(int(time.time()), this_withdrawal["member"], last_available_money)
+
+                get_new_faction_for_old_member(donation["member"])
+                prune_database()
