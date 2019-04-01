@@ -1,3 +1,5 @@
+#! /usr/bin/python
+
 import json
 import random
 import re
@@ -246,7 +248,7 @@ if __name__ == '__main__':
         # faction. Final details on their bank account only live
         # in the donationnews from API
         donations = []
-        all_donations = analyze_donations(data["donationnews"])
+        all_donations = analyze_donations(data["fundsnews"])
         for donation in all_donations:
             if donation["member"] in old_members:
                 # Since old_members are in database this should
